@@ -62,8 +62,8 @@ public class StatsClient {
                     new ParameterizedTypeReference<List<ViewStats>>() {}
             );
             return response.getBody() != null ? response.getBody() : Collections.emptyList();
-        } catch (Exception e) {
-            log.error("Failed to get stats from server: {}", e.getMessage());
+        } catch (Exception exception) {
+            log.error("Failed to get stats from server: {}", exception.getMessage());
             return Collections.emptyList();
         }
     }
