@@ -5,22 +5,28 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import ru.practicum.main.category.dto.CategoryDto;
 import ru.practicum.main.compilation.dto.CompilationDto;
 import ru.practicum.main.compilation.dto.NewCompilationDto;
 import ru.practicum.main.compilation.dto.UpdateCompilationRequest;
 import ru.practicum.main.compilation.model.Compilation;
 import ru.practicum.main.compilation.repository.CompilationRepository;
 import ru.practicum.main.event.dto.EventShortDto;
+import ru.practicum.main.event.dto.LocationDto;
 import ru.practicum.main.event.model.Event;
 import ru.practicum.main.event.repository.EventRepository;
 import ru.practicum.main.exception.NotFoundException;
+import ru.practicum.main.exception.ValidationException;
 import ru.practicum.main.request.model.RequestStatus;
 import ru.practicum.main.request.repository.RequestRepository;
+import ru.practicum.main.user.dto.UserShortDto;
 import ru.practicum.stats.client.StatsClient;
 import ru.practicum.stats.dto.ViewStats;
 
 import java.time.LocalDateTime;
-import java.util.*;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -35,7 +41,7 @@ public class CompilationService {
     private final StatsClient statsClient;
 
     public List<CompilationDto> getCompilations(Boolean pinned, int from, int size) {
-        log.info("Getting compilations with pinned={}", pinned);
+        log.info("Getting compilations with pinned={}, from={}, size={}", pinned, from, size);
         PageRequest pageRequest = PageRequest.of(from / size, size);
 
         List<Compilation> compilations;
@@ -89,6 +95,9 @@ public class CompilationService {
         Compilation compilation = getCompilationById(compId);
 
         if (request.getTitle() != null) {
+            if (request.getTitle().length() > 50) {
+                throw new ValidationException("Field: title. Error: length must be between 1 and 50. Value: " + request.getTitle());
+            }
             compilation.setTitle(request.getTitle());
         }
         if (request.getPinned() != null) {
@@ -122,10 +131,10 @@ public class CompilationService {
         return EventShortDto.builder()
                 .id(event.getId())
                 .annotation(event.getAnnotation())
-                .category(new ru.practicum.main.category.dto.CategoryDto(event.getCategory().getId(), event.getCategory().getName()))
+                .category(new CategoryDto(event.getCategory().getId(), event.getCategory().getName()))
                 .confirmedRequests(confirmedRequests)
                 .eventDate(event.getEventDate())
-                .initiator(new ru.practicum.main.user.dto.UserShortDto(event.getInitiator().getId(), event.getInitiator().getName()))
+                .initiator(new UserShortDto(event.getInitiator().getId(), event.getInitiator().getName()))
                 .paid(event.getPaid())
                 .title(event.getTitle())
                 .views(views)
@@ -134,7 +143,7 @@ public class CompilationService {
 
     private long getViews(Event event) {
         List<ViewStats> stats = statsClient.getStats(
-                event.getCreatedOn(),
+                event.getCreatedOn() != null ? event.getCreatedOn() : LocalDateTime.now().minusYears(1),
                 LocalDateTime.now(),
                 List.of("/events/" + event.getId()),
                 true
