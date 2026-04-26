@@ -12,6 +12,7 @@ import ru.practicum.main.category.repository.CategoryRepository;
 import ru.practicum.main.event.repository.EventRepository;
 import ru.practicum.main.exception.ConflictException;
 import ru.practicum.main.exception.NotFoundException;
+import ru.practicum.main.exception.ValidationException;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -44,8 +45,12 @@ public class CategoryService {
     public CategoryDto createCategory(NewCategoryDto newCategoryDto) {
         log.info("Creating category: {}", newCategoryDto);
 
+        if (newCategoryDto.getName().length() > 50) {
+            throw new ValidationException("Field: name. Error: length must be between 1 and 50. Value: " + newCategoryDto.getName());
+        }
+
         if (categoryRepository.existsByName(newCategoryDto.getName())) {
-            throw new ConflictException("Category name must be unique");
+            throw new ConflictException("could not execute statement; SQL [n/a]; constraint [uq_category_name]; nested exception is org.hibernate.exception.ConstraintViolationException: could not execute statement");
         }
 
         Category category = Category.builder()
@@ -62,9 +67,13 @@ public class CategoryService {
 
         Category category = getCategoryById(catId);
 
+        if (categoryDto.getName() != null && categoryDto.getName().length() > 50) {
+            throw new ValidationException("Field: name. Error: length must be between 1 and 50. Value: " + categoryDto.getName());
+        }
+
         if (!category.getName().equals(categoryDto.getName()) &&
                 categoryRepository.existsByName(categoryDto.getName())) {
-            throw new ConflictException("Category name must be unique");
+            throw new ConflictException("could not execute statement; SQL [n/a]; constraint [uq_category_name]; nested exception is org.hibernate.exception.ConstraintViolationException: could not execute statement");
         }
 
         category.setName(categoryDto.getName());
