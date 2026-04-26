@@ -10,6 +10,8 @@ import ru.practicum.main.event.service.EventService;
 import ru.practicum.main.exception.ValidationException;
 
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.PositiveOrZero;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
@@ -33,19 +35,11 @@ public class EventPublicController {
             @RequestParam(required = false) String rangeEnd,
             @RequestParam(defaultValue = "false") boolean onlyAvailable,
             @RequestParam(required = false) String sort,
-            @RequestParam(defaultValue = "0") int from,
-            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "0") @PositiveOrZero int from,
+            @RequestParam(defaultValue = "10") @Positive int size,
             HttpServletRequest request) {
         log.info("GET /events - text={}, categories={}, paid={}, rangeStart={}, rangeEnd={}, onlyAvailable={}, sort={}, from={}, size={}",
                 text, categories, paid, rangeStart, rangeEnd, onlyAvailable, sort, from, size);
-
-        // Валидация from и size
-        if (from < 0) {
-            throw new ValidationException("Parameter 'from' must be greater than or equal to 0");
-        }
-        if (size <= 0) {
-            throw new ValidationException("Parameter 'size' must be greater than 0");
-        }
 
         if (sort != null && !sort.equals("EVENT_DATE") && !sort.equals("VIEWS")) {
             throw new ValidationException("Invalid sort parameter. Allowed values: EVENT_DATE, VIEWS");
@@ -59,7 +53,7 @@ public class EventPublicController {
             try {
                 startDateTime = LocalDateTime.parse(rangeStart, formatter);
             } catch (DateTimeParseException e) {
-                throw new ValidationException("Invalid rangeStart format. Expected format: yyyy-MM-dd HH:mm:ss");
+                throw new ValidationException("Invalid rangeStart format. Expected format: yyyy-MM-dd HH:mm:ss. Value: " + rangeStart);
             }
         }
 
@@ -67,8 +61,12 @@ public class EventPublicController {
             try {
                 endDateTime = LocalDateTime.parse(rangeEnd, formatter);
             } catch (DateTimeParseException e) {
-                throw new ValidationException("Invalid rangeEnd format. Expected format: yyyy-MM-dd HH:mm:ss");
+                throw new ValidationException("Invalid rangeEnd format. Expected format: yyyy-MM-dd HH:mm:ss. Value: " + rangeEnd);
             }
+        }
+
+        if (startDateTime != null && endDateTime != null && endDateTime.isBefore(startDateTime)) {
+            throw new ValidationException("Range end must be after range start");
         }
 
         return eventService.getPublishedEvents(text, categories, paid, startDateTime, endDateTime,
@@ -79,6 +77,9 @@ public class EventPublicController {
     @GetMapping("/{id}")
     public EventFullDto getEvent(@PathVariable Long id, HttpServletRequest request) {
         log.info("GET /events/{}", id);
+        if (id <= 0) {
+            throw new ValidationException("Event id must be positive");
+        }
         return eventService.getPublishedEvent(id, request.getRemoteAddr(), request.getRequestURI());
     }
 }
