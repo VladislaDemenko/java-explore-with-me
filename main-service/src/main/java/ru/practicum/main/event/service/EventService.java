@@ -183,10 +183,7 @@ public class EventService {
                                                   LocalDateTime rangeStart, LocalDateTime rangeEnd,
                                                   boolean onlyAvailable, String sort, int from, int size,
                                                   String remoteAddr, String requestURI) {
-        if (rangeStart != null && rangeEnd != null && rangeStart.isAfter(rangeEnd)) {
-            throw new ValidationException("Event must be published");
-        }
-
+        // Сохраняем статистику
         EndpointHit hit = EndpointHit.builder()
                 .app("ewm-main-service")
                 .uri(requestURI)
@@ -202,8 +199,8 @@ public class EventService {
                 .filter(event -> text == null || text.isEmpty() ||
                         event.getAnnotation().toLowerCase().contains(text.toLowerCase()) ||
                         (event.getDescription() != null && event.getDescription().toLowerCase().contains(text.toLowerCase())))
-                .filter(event -> rangeStart == null || event.getEventDate().isAfter(rangeStart))
-                .filter(event -> rangeEnd == null || event.getEventDate().isBefore(rangeEnd))
+                .filter(event -> rangeStart == null || event.getEventDate().isAfter(rangeStart) || event.getEventDate().isEqual(rangeStart))
+                .filter(event -> rangeEnd == null || event.getEventDate().isBefore(rangeEnd) || event.getEventDate().isEqual(rangeEnd))
                 .filter(event -> !onlyAvailable || event.getParticipantLimit() == 0 ||
                         requestRepository.countByEventIdAndStatus(event.getId(), RequestStatus.CONFIRMED) < event.getParticipantLimit())
                 .collect(Collectors.toList());
