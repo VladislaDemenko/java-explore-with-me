@@ -2,7 +2,6 @@ package ru.practicum.main.event.controller;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import ru.practicum.main.event.dto.EventFullDto;
@@ -11,8 +10,6 @@ import ru.practicum.main.event.service.EventService;
 import ru.practicum.main.exception.ValidationException;
 
 import jakarta.servlet.http.HttpServletRequest;
-import jakarta.validation.constraints.Positive;
-import jakarta.validation.constraints.PositiveOrZero;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
@@ -36,11 +33,23 @@ public class EventPublicController {
             @RequestParam(required = false) String rangeEnd,
             @RequestParam(defaultValue = "false") boolean onlyAvailable,
             @RequestParam(required = false) String sort,
-            @PositiveOrZero @RequestParam(defaultValue = "0") int from,
-            @Positive @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "0") int from,
+            @RequestParam(defaultValue = "10") int size,
             HttpServletRequest request) {
         log.info("GET /events - text={}, categories={}, paid={}, rangeStart={}, rangeEnd={}, onlyAvailable={}, sort={}, from={}, size={}",
                 text, categories, paid, rangeStart, rangeEnd, onlyAvailable, sort, from, size);
+
+        // Валидация from и size
+        if (from < 0) {
+            throw new ValidationException("Parameter 'from' must be greater than or equal to 0");
+        }
+        if (size <= 0) {
+            throw new ValidationException("Parameter 'size' must be greater than 0");
+        }
+
+        if (sort != null && !sort.equals("EVENT_DATE") && !sort.equals("VIEWS")) {
+            throw new ValidationException("Invalid sort parameter. Allowed values: EVENT_DATE, VIEWS");
+        }
 
         LocalDateTime startDateTime = null;
         LocalDateTime endDateTime = null;
@@ -50,7 +59,7 @@ public class EventPublicController {
             try {
                 startDateTime = LocalDateTime.parse(rangeStart, formatter);
             } catch (DateTimeParseException e) {
-                throw new ValidationException("Invalid rangeStart format: " + rangeStart + ". Expected format: yyyy-MM-dd HH:mm:ss");
+                throw new ValidationException("Invalid rangeStart format. Expected format: yyyy-MM-dd HH:mm:ss");
             }
         }
 
@@ -58,12 +67,8 @@ public class EventPublicController {
             try {
                 endDateTime = LocalDateTime.parse(rangeEnd, formatter);
             } catch (DateTimeParseException e) {
-                throw new ValidationException("Invalid rangeEnd format: " + rangeEnd + ". Expected format: yyyy-MM-dd HH:mm:ss");
+                throw new ValidationException("Invalid rangeEnd format. Expected format: yyyy-MM-dd HH:mm:ss");
             }
-        }
-
-        if (sort != null && !sort.equals("EVENT_DATE") && !sort.equals("VIEWS")) {
-            throw new ValidationException("Invalid sort parameter: " + sort);
         }
 
         return eventService.getPublishedEvents(text, categories, paid, startDateTime, endDateTime,
