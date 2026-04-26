@@ -64,7 +64,7 @@ public class EventService {
 
         LocalDateTime eventDate = LocalDateTime.parse(newEventDto.getEventDate(), FORMATTER);
         if (eventDate.isBefore(LocalDateTime.now().plusHours(2))) {
-            throw new ConflictException("Field: eventDate. Error: должно содержать дату, которая еще не наступила. Value: " + newEventDto.getEventDate());
+            throw new ValidationException("Field: eventDate. Error: должно содержать дату, которая еще не наступила. Value: " + newEventDto.getEventDate());
         }
 
         if (newEventDto.getParticipantLimit() != null && newEventDto.getParticipantLimit() < 0) {
@@ -111,7 +111,7 @@ public class EventService {
         if (request.getEventDate() != null) {
             LocalDateTime newDate = LocalDateTime.parse(request.getEventDate(), FORMATTER);
             if (newDate.isBefore(LocalDateTime.now().plusHours(2))) {
-                throw new ConflictException("Field: eventDate. Error: должно содержать дату, которая еще не наступила. Value: " + request.getEventDate());
+                throw new ValidationException("Field: eventDate. Error: должно содержать дату, которая еще не наступила. Value: " + request.getEventDate());
             }
             event.setEventDate(newDate);
         }
@@ -153,7 +153,7 @@ public class EventService {
         if (request.getEventDate() != null) {
             LocalDateTime newDate = LocalDateTime.parse(request.getEventDate(), FORMATTER);
             if (newDate.isBefore(LocalDateTime.now().plusHours(1))) {
-                throw new ConflictException("The event date must be at least 1 hour from now");
+                throw new ValidationException("Field: eventDate. Error: должно содержать дату, которая еще не наступила. Value: " + request.getEventDate());
             }
             event.setEventDate(newDate);
         }
@@ -195,11 +195,28 @@ public class EventService {
                 .build();
         statsClient.sendHit(hit);
 
-        PageRequest pageRequest = PageRequest.of(from / size, size);
-        List<Event> events = eventRepository.findAll(pageRequest).getContent();
+        List<Event> events = eventRepository.findAll().stream()
+                .filter(e -> e.getState() == EventState.PUBLISHED)
+                .filter(e -> categories == null || categories.isEmpty() || categories.contains(e.getCategory().getId()))
+                .filter(e -> paid == null || e.getPaid().equals(paid))
+                .filter(e -> text == null || text.isEmpty() ||
+                        e.getAnnotation().toLowerCase().contains(text.toLowerCase()) ||
+                        (e.getDescription() != null && e.getDescription().toLowerCase().contains(text.toLowerCase())))
+                .filter(e -> rangeStart == null || e.getEventDate().isAfter(rangeStart))
+                .filter(e -> rangeEnd == null || e.getEventDate().isBefore(rangeEnd))
+                .filter(e -> !onlyAvailable || e.getParticipantLimit() == 0 ||
+                        requestRepository.countByEventIdAndStatus(e.getId(), RequestStatus.CONFIRMED) < e.getParticipantLimit())
+                .collect(Collectors.toList());
+
+        if ("VIEWS".equals(sort)) {
+            events.sort(Comparator.comparing(this::getViews).reversed());
+        } else {
+            events.sort(Comparator.comparing(Event::getEventDate));
+        }
 
         return events.stream()
-                .filter(e -> e.getState() == EventState.PUBLISHED)
+                .skip(from)
+                .limit(size)
                 .map(this::toEventShortDto)
                 .collect(Collectors.toList());
     }
@@ -218,49 +235,36 @@ public class EventService {
             throw new NotFoundException("Event with id=" + eventId + " was not found");
         }
 
-        return toEventFullDto(event);
+        EventFullDto fullDto = toEventFullDto(event);
+        fullDto.setViews(getViews(event) + 1);
+
+        return fullDto;
     }
 
     private void validateUpdateFields(Object request) {
         if (request instanceof UpdateEventUserRequest) {
             UpdateEventUserRequest req = (UpdateEventUserRequest) request;
-            if (req.getAnnotation() != null) {
-                if (req.getAnnotation().length() < 20 || req.getAnnotation().length() > 2000) {
-                    throw new ValidationException("Field: annotation. Error: length must be between 20 and 2000. Value: " + req.getAnnotation());
-                }
-            }
-            if (req.getDescription() != null) {
-                if (req.getDescription().length() < 20 || req.getDescription().length() > 7000) {
-                    throw new ValidationException("Field: description. Error: length must be between 20 and 7000. Value: " + req.getDescription());
-                }
-            }
-            if (req.getTitle() != null) {
-                if (req.getTitle().length() < 3 || req.getTitle().length() > 120) {
-                    throw new ValidationException("Field: title. Error: length must be between 3 and 120. Value: " + req.getTitle());
-                }
-            }
+            validateStringLength(req.getAnnotation(), 20, 2000, "annotation");
+            validateStringLength(req.getDescription(), 20, 7000, "description");
+            validateStringLength(req.getTitle(), 3, 120, "title");
             if (req.getParticipantLimit() != null && req.getParticipantLimit() < 0) {
                 throw new ValidationException("Field: participantLimit. Error: must be greater than or equal to 0. Value: " + req.getParticipantLimit());
             }
         } else if (request instanceof UpdateEventAdminRequest) {
             UpdateEventAdminRequest req = (UpdateEventAdminRequest) request;
-            if (req.getAnnotation() != null) {
-                if (req.getAnnotation().length() < 20 || req.getAnnotation().length() > 2000) {
-                    throw new ValidationException("Field: annotation. Error: length must be between 20 and 2000. Value: " + req.getAnnotation());
-                }
-            }
-            if (req.getDescription() != null) {
-                if (req.getDescription().length() < 20 || req.getDescription().length() > 7000) {
-                    throw new ValidationException("Field: description. Error: length must be between 20 and 7000. Value: " + req.getDescription());
-                }
-            }
-            if (req.getTitle() != null) {
-                if (req.getTitle().length() < 3 || req.getTitle().length() > 120) {
-                    throw new ValidationException("Field: title. Error: length must be between 3 and 120. Value: " + req.getTitle());
-                }
-            }
+            validateStringLength(req.getAnnotation(), 20, 2000, "annotation");
+            validateStringLength(req.getDescription(), 20, 7000, "description");
+            validateStringLength(req.getTitle(), 3, 120, "title");
             if (req.getParticipantLimit() != null && req.getParticipantLimit() < 0) {
                 throw new ValidationException("Field: participantLimit. Error: must be greater than or equal to 0. Value: " + req.getParticipantLimit());
+            }
+        }
+    }
+
+    private void validateStringLength(String value, int min, int max, String fieldName) {
+        if (value != null) {
+            if (value.length() < min || value.length() > max) {
+                throw new ValidationException("Field: " + fieldName + ". Error: length must be between " + min + " and " + max + ". Value: " + value);
             }
         }
     }
