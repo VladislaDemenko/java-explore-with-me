@@ -19,6 +19,7 @@ import ru.practicum.main.user.model.User;
 import ru.practicum.main.user.repository.UserRepository;
 
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -71,7 +72,7 @@ public class RequestService {
         boolean autoConfirm = !event.getRequestModeration() || event.getParticipantLimit() == 0;
 
         ParticipationRequest request = ParticipationRequest.builder()
-                .created(LocalDateTime.now())
+                .created(LocalDateTime.now().truncatedTo(ChronoUnit.MICROS))
                 .event(event)
                 .requester(requester)
                 .status(autoConfirm ? RequestStatus.CONFIRMED : RequestStatus.PENDING)
@@ -107,7 +108,6 @@ public class RequestService {
 
         Event event = getEventByIdAndInitiator(eventId, userId);
 
-        // Проверяем лимит участников
         if (event.getParticipantLimit() > 0) {
             long confirmedCount = requestRepository.countByEventIdAndStatus(eventId, RequestStatus.CONFIRMED);
             if (confirmedCount >= event.getParticipantLimit()) {
@@ -163,7 +163,7 @@ public class RequestService {
     private ParticipationRequestDto toDto(ParticipationRequest request) {
         return ParticipationRequestDto.builder()
                 .id(request.getId())
-                .created(request.getCreated().truncatedTo(java.time.temporal.ChronoUnit.MICROS))
+                .created(request.getCreated().truncatedTo(ChronoUnit.MICROS))
                 .event(request.getEvent().getId())
                 .requester(request.getRequester().getId())
                 .status(request.getStatus().name())
