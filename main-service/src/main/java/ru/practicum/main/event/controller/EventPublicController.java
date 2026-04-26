@@ -3,12 +3,16 @@ package ru.practicum.main.event.controller;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import ru.practicum.main.event.dto.EventFullDto;
 import ru.practicum.main.event.dto.EventShortDto;
 import ru.practicum.main.event.service.EventService;
+import ru.practicum.main.exception.ValidationException;
 
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.PositiveOrZero;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -16,6 +20,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/events")
 @RequiredArgsConstructor
+@Validated
 public class EventPublicController {
 
     private final EventService eventService;
@@ -29,10 +34,16 @@ public class EventPublicController {
             @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime rangeEnd,
             @RequestParam(defaultValue = "false") boolean onlyAvailable,
             @RequestParam(required = false) String sort,
-            @RequestParam(defaultValue = "0") int from,
-            @RequestParam(defaultValue = "10") int size,
+            @PositiveOrZero @RequestParam(defaultValue = "0") int from,
+            @Positive @RequestParam(defaultValue = "10") int size,
             HttpServletRequest request) {
-        log.info("GET /events");
+        log.info("GET /events - text={}, categories={}, paid={}, rangeStart={}, rangeEnd={}, onlyAvailable={}, sort={}, from={}, size={}",
+                text, categories, paid, rangeStart, rangeEnd, onlyAvailable, sort, from, size);
+
+        if (sort != null && !sort.equals("EVENT_DATE") && !sort.equals("VIEWS")) {
+            throw new ValidationException("Invalid sort parameter: " + sort);
+        }
+
         return eventService.getPublishedEvents(text, categories, paid, rangeStart, rangeEnd,
                 onlyAvailable, sort, from, size,
                 request.getRemoteAddr(), request.getRequestURI());
