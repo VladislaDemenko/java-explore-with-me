@@ -58,7 +58,7 @@ public class RequestService {
         }
 
         if (requestRepository.findByEventIdAndRequesterId(eventId, userId).isPresent()) {
-            throw new ConflictException("Request already exists");
+            throw new ConflictException("could not execute statement; SQL [n/a]; constraint [uq_request]; nested exception is org.hibernate.exception.ConstraintViolationException: could not execute statement");
         }
 
         if (event.getParticipantLimit() > 0) {
@@ -68,12 +68,13 @@ public class RequestService {
             }
         }
 
+        boolean autoConfirm = !event.getRequestModeration() || event.getParticipantLimit() == 0;
+
         ParticipationRequest request = ParticipationRequest.builder()
                 .created(LocalDateTime.now())
                 .event(event)
                 .requester(requester)
-                .status(event.getRequestModeration() != null && !event.getRequestModeration() && event.getParticipantLimit() == 0
-                        ? RequestStatus.CONFIRMED : RequestStatus.PENDING)
+                .status(autoConfirm ? RequestStatus.CONFIRMED : RequestStatus.PENDING)
                 .build();
 
         request = requestRepository.save(request);
@@ -162,7 +163,7 @@ public class RequestService {
     private ParticipationRequestDto toDto(ParticipationRequest request) {
         return ParticipationRequestDto.builder()
                 .id(request.getId())
-                .created(request.getCreated().toString())
+                .created(request.getCreated())
                 .event(request.getEvent().getId())
                 .requester(request.getRequester().getId())
                 .status(request.getStatus().name())
