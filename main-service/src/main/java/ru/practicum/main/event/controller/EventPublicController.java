@@ -14,6 +14,8 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.List;
 
 @Slf4j
@@ -30,8 +32,8 @@ public class EventPublicController {
             @RequestParam(required = false) String text,
             @RequestParam(required = false) List<Long> categories,
             @RequestParam(required = false) Boolean paid,
-            @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime rangeStart,
-            @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime rangeEnd,
+            @RequestParam(required = false) String rangeStart,
+            @RequestParam(required = false) String rangeEnd,
             @RequestParam(defaultValue = "false") boolean onlyAvailable,
             @RequestParam(required = false) String sort,
             @PositiveOrZero @RequestParam(defaultValue = "0") int from,
@@ -40,11 +42,31 @@ public class EventPublicController {
         log.info("GET /events - text={}, categories={}, paid={}, rangeStart={}, rangeEnd={}, onlyAvailable={}, sort={}, from={}, size={}",
                 text, categories, paid, rangeStart, rangeEnd, onlyAvailable, sort, from, size);
 
+        LocalDateTime startDateTime = null;
+        LocalDateTime endDateTime = null;
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+
+        if (rangeStart != null) {
+            try {
+                startDateTime = LocalDateTime.parse(rangeStart, formatter);
+            } catch (DateTimeParseException e) {
+                throw new ValidationException("Invalid rangeStart format: " + rangeStart + ". Expected format: yyyy-MM-dd HH:mm:ss");
+            }
+        }
+
+        if (rangeEnd != null) {
+            try {
+                endDateTime = LocalDateTime.parse(rangeEnd, formatter);
+            } catch (DateTimeParseException e) {
+                throw new ValidationException("Invalid rangeEnd format: " + rangeEnd + ". Expected format: yyyy-MM-dd HH:mm:ss");
+            }
+        }
+
         if (sort != null && !sort.equals("EVENT_DATE") && !sort.equals("VIEWS")) {
             throw new ValidationException("Invalid sort parameter: " + sort);
         }
 
-        return eventService.getPublishedEvents(text, categories, paid, rangeStart, rangeEnd,
+        return eventService.getPublishedEvents(text, categories, paid, startDateTime, endDateTime,
                 onlyAvailable, sort, from, size,
                 request.getRemoteAddr(), request.getRequestURI());
     }
