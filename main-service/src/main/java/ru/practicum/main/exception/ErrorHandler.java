@@ -45,6 +45,22 @@ public class ErrorHandler {
                 .build();
     }
 
+    @ExceptionHandler(ConstraintViolationException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public ApiError handleConstraintViolation(ConstraintViolationException e) {
+        log.error("Constraint violation: {}", e.getMessage());
+        String message = e.getConstraintViolations().stream()
+                .map(violation -> violation.getPropertyPath() + ": " + violation.getMessage())
+                .collect(Collectors.joining("; "));
+
+        return ApiError.builder()
+                .status("BAD_REQUEST")
+                .reason("Incorrectly made request.")
+                .message(message.isEmpty() ? e.getMessage() : message)
+                .timestamp(LocalDateTime.now().format(FORMATTER))
+                .build();
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public ApiError handleMethodArgumentNotValid(MethodArgumentNotValidException e) {
@@ -61,18 +77,6 @@ public class ErrorHandler {
                 .message(String.join("; ", errors))
                 .timestamp(LocalDateTime.now().format(FORMATTER))
                 .errors(errors)
-                .build();
-    }
-
-    @ExceptionHandler(ConstraintViolationException.class)
-    @ResponseStatus(HttpStatus.BAD_REQUEST)
-    public ApiError handleConstraintViolation(ConstraintViolationException e) {
-        log.error("Constraint violation: {}", e.getMessage());
-        return ApiError.builder()
-                .status("BAD_REQUEST")
-                .reason("Incorrectly made request.")
-                .message(e.getMessage())
-                .timestamp(LocalDateTime.now().format(FORMATTER))
                 .build();
     }
 
@@ -108,6 +112,20 @@ public class ErrorHandler {
                 .status("CONFLICT")
                 .reason("Integrity constraint has been violated.")
                 .message(e.getMessage())
+                .timestamp(LocalDateTime.now().format(FORMATTER))
+                .build();
+    }
+
+    @ExceptionHandler(org.springframework.web.method.annotation.MethodArgumentTypeMismatchException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public ApiError handleTypeMismatch(org.springframework.web.method.annotation.MethodArgumentTypeMismatchException e) {
+        log.error("Type mismatch: {}", e.getMessage());
+        return ApiError.builder()
+                .status("BAD_REQUEST")
+                .reason("Incorrectly made request.")
+                .message("Failed to convert value of type " + e.getValue().getClass().getSimpleName() +
+                        " to required type " + e.getRequiredType().getSimpleName() +
+                        "; nested exception is " + e.getCause().getMessage())
                 .timestamp(LocalDateTime.now().format(FORMATTER))
                 .build();
     }
