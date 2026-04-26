@@ -163,7 +163,7 @@ public class RequestService {
     private ParticipationRequestDto toDto(ParticipationRequest request) {
         return ParticipationRequestDto.builder()
                 .id(request.getId())
-                .created(request.getCreated())
+                .created(request.getCreated().truncatedTo(java.time.temporal.ChronoUnit.MICROS))
                 .event(request.getEvent().getId())
                 .requester(request.getRequester().getId())
                 .status(request.getStatus().name())
