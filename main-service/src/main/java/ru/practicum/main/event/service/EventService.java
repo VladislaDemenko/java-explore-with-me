@@ -196,16 +196,16 @@ public class EventService {
         statsClient.sendHit(hit);
 
         List<Event> events = eventRepository.findAll().stream()
-                .filter(e -> e.getState() == EventState.PUBLISHED)
-                .filter(e -> categories == null || categories.isEmpty() || categories.contains(e.getCategory().getId()))
-                .filter(e -> paid == null || e.getPaid().equals(paid))
-                .filter(e -> text == null || text.isEmpty() ||
-                        e.getAnnotation().toLowerCase().contains(text.toLowerCase()) ||
-                        (e.getDescription() != null && e.getDescription().toLowerCase().contains(text.toLowerCase())))
-                .filter(e -> rangeStart == null || e.getEventDate().isAfter(rangeStart))
-                .filter(e -> rangeEnd == null || e.getEventDate().isBefore(rangeEnd))
-                .filter(e -> !onlyAvailable || e.getParticipantLimit() == 0 ||
-                        requestRepository.countByEventIdAndStatus(e.getId(), RequestStatus.CONFIRMED) < e.getParticipantLimit())
+                .filter(event -> event.getState() == EventState.PUBLISHED)
+                .filter(event -> categories == null || categories.isEmpty() || categories.contains(event.getCategory().getId()))
+                .filter(event -> paid == null || event.getPaid().equals(paid))
+                .filter(event -> text == null || text.isEmpty() ||
+                        event.getAnnotation().toLowerCase().contains(text.toLowerCase()) ||
+                        (event.getDescription() != null && event.getDescription().toLowerCase().contains(text.toLowerCase())))
+                .filter(event -> rangeStart == null || event.getEventDate().isAfter(rangeStart))
+                .filter(event -> rangeEnd == null || event.getEventDate().isBefore(rangeEnd))
+                .filter(event -> !onlyAvailable || event.getParticipantLimit() == 0 ||
+                        requestRepository.countByEventIdAndStatus(event.getId(), RequestStatus.CONFIRMED) < event.getParticipantLimit())
                 .collect(Collectors.toList());
 
         if ("VIEWS".equals(sort)) {
