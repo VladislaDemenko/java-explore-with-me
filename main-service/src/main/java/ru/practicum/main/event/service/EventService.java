@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import ru.practicum.main.category.dto.CategoryDto;
 import ru.practicum.main.category.model.Category;
 import ru.practicum.main.category.repository.CategoryRepository;
 import ru.practicum.main.event.dto.*;
@@ -14,9 +15,10 @@ import ru.practicum.main.event.model.Location;
 import ru.practicum.main.event.repository.EventRepository;
 import ru.practicum.main.exception.ConflictException;
 import ru.practicum.main.exception.NotFoundException;
-import ru.practicum.main.request.model.ParticipationRequest;
+import ru.practicum.main.exception.ValidationException;
 import ru.practicum.main.request.model.RequestStatus;
 import ru.practicum.main.request.repository.RequestRepository;
+import ru.practicum.main.user.dto.UserShortDto;
 import ru.practicum.main.user.model.User;
 import ru.practicum.main.user.repository.UserRepository;
 import ru.practicum.stats.client.StatsClient;
@@ -25,9 +27,8 @@ import ru.practicum.stats.dto.ViewStats;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -46,6 +47,7 @@ public class EventService {
 
     public List<EventShortDto> getEventsByUser(Long userId, int from, int size) {
         log.info("Getting events by user {}", userId);
+        getUserById(userId);
         PageRequest pageRequest = PageRequest.of(from / size, size);
 
         return eventRepository.findByInitiatorId(userId, pageRequest).stream()
@@ -62,7 +64,11 @@ public class EventService {
 
         LocalDateTime eventDate = LocalDateTime.parse(newEventDto.getEventDate(), FORMATTER);
         if (eventDate.isBefore(LocalDateTime.now().plusHours(2))) {
-            throw new ConflictException("Field: eventDate. Error: должно содержать дату, которая еще не наступила.");
+            throw new ConflictException("Field: eventDate. Error: должно содержать дату, которая еще не наступила. Value: " + newEventDto.getEventDate());
+        }
+
+        if (newEventDto.getParticipantLimit() != null && newEventDto.getParticipantLimit() < 0) {
+            throw new ValidationException("Field: participantLimit. Error: must be greater than or equal to 0. Value: " + newEventDto.getParticipantLimit());
         }
 
         Event event = Event.builder()
@@ -100,6 +106,16 @@ public class EventService {
             throw new ConflictException("Only pending or canceled events can be changed");
         }
 
+        validateUpdateFields(request);
+
+        if (request.getEventDate() != null) {
+            LocalDateTime newDate = LocalDateTime.parse(request.getEventDate(), FORMATTER);
+            if (newDate.isBefore(LocalDateTime.now().plusHours(2))) {
+                throw new ConflictException("Field: eventDate. Error: должно содержать дату, которая еще не наступила. Value: " + request.getEventDate());
+            }
+            event.setEventDate(newDate);
+        }
+
         updateEventFields(event, request);
 
         if (request.getStateAction() != null) {
@@ -132,15 +148,22 @@ public class EventService {
 
         Event event = getEventById(eventId);
 
+        validateUpdateFields(request);
+
+        if (request.getEventDate() != null) {
+            LocalDateTime newDate = LocalDateTime.parse(request.getEventDate(), FORMATTER);
+            if (newDate.isBefore(LocalDateTime.now().plusHours(1))) {
+                throw new ConflictException("The event date must be at least 1 hour from now");
+            }
+            event.setEventDate(newDate);
+        }
+
         updateEventFields(event, request);
 
         if (request.getStateAction() != null) {
             if (request.getStateAction().equals("PUBLISH_EVENT")) {
                 if (event.getState() != EventState.PENDING) {
                     throw new ConflictException("Cannot publish the event because it's not in the right state: " + event.getState());
-                }
-                if (event.getEventDate().isBefore(LocalDateTime.now().plusHours(1))) {
-                    throw new ConflictException("The event date must be at least 1 hour from now");
                 }
                 event.setState(EventState.PUBLISHED);
                 event.setPublishedOn(LocalDateTime.now());
@@ -160,6 +183,10 @@ public class EventService {
                                                   LocalDateTime rangeStart, LocalDateTime rangeEnd,
                                                   boolean onlyAvailable, String sort, int from, int size,
                                                   String remoteAddr, String requestURI) {
+        if (rangeStart != null && rangeEnd != null && rangeStart.isAfter(rangeEnd)) {
+            throw new ValidationException("Event must be published");
+        }
+
         EndpointHit hit = EndpointHit.builder()
                 .app("ewm-main-service")
                 .uri(requestURI)
@@ -169,13 +196,18 @@ public class EventService {
         statsClient.sendHit(hit);
 
         PageRequest pageRequest = PageRequest.of(from / size, size);
-        return List.of();
+        List<Event> events = eventRepository.findAll(pageRequest).getContent();
+
+        return events.stream()
+                .filter(e -> e.getState() == EventState.PUBLISHED)
+                .map(this::toEventShortDto)
+                .collect(Collectors.toList());
     }
 
     public EventFullDto getPublishedEvent(Long eventId, String remoteAddr, String requestURI) {
         EndpointHit hit = EndpointHit.builder()
                 .app("ewm-main-service")
-                .uri(requestURI)
+                .uri("/events/" + eventId)
                 .ip(remoteAddr)
                 .timestamp(LocalDateTime.now())
                 .build();
@@ -189,37 +221,71 @@ public class EventService {
         return toEventFullDto(event);
     }
 
+    private void validateUpdateFields(Object request) {
+        if (request instanceof UpdateEventUserRequest) {
+            UpdateEventUserRequest req = (UpdateEventUserRequest) request;
+            if (req.getAnnotation() != null) {
+                if (req.getAnnotation().length() < 20 || req.getAnnotation().length() > 2000) {
+                    throw new ValidationException("Field: annotation. Error: length must be between 20 and 2000. Value: " + req.getAnnotation());
+                }
+            }
+            if (req.getDescription() != null) {
+                if (req.getDescription().length() < 20 || req.getDescription().length() > 7000) {
+                    throw new ValidationException("Field: description. Error: length must be between 20 and 7000. Value: " + req.getDescription());
+                }
+            }
+            if (req.getTitle() != null) {
+                if (req.getTitle().length() < 3 || req.getTitle().length() > 120) {
+                    throw new ValidationException("Field: title. Error: length must be between 3 and 120. Value: " + req.getTitle());
+                }
+            }
+            if (req.getParticipantLimit() != null && req.getParticipantLimit() < 0) {
+                throw new ValidationException("Field: participantLimit. Error: must be greater than or equal to 0. Value: " + req.getParticipantLimit());
+            }
+        } else if (request instanceof UpdateEventAdminRequest) {
+            UpdateEventAdminRequest req = (UpdateEventAdminRequest) request;
+            if (req.getAnnotation() != null) {
+                if (req.getAnnotation().length() < 20 || req.getAnnotation().length() > 2000) {
+                    throw new ValidationException("Field: annotation. Error: length must be between 20 and 2000. Value: " + req.getAnnotation());
+                }
+            }
+            if (req.getDescription() != null) {
+                if (req.getDescription().length() < 20 || req.getDescription().length() > 7000) {
+                    throw new ValidationException("Field: description. Error: length must be between 20 and 7000. Value: " + req.getDescription());
+                }
+            }
+            if (req.getTitle() != null) {
+                if (req.getTitle().length() < 3 || req.getTitle().length() > 120) {
+                    throw new ValidationException("Field: title. Error: length must be between 3 and 120. Value: " + req.getTitle());
+                }
+            }
+            if (req.getParticipantLimit() != null && req.getParticipantLimit() < 0) {
+                throw new ValidationException("Field: participantLimit. Error: must be greater than or equal to 0. Value: " + req.getParticipantLimit());
+            }
+        }
+    }
+
     private void updateEventFields(Event event, Object request) {
         if (request instanceof UpdateEventUserRequest) {
-            UpdateEventUserRequest userRequest = (UpdateEventUserRequest) request;
-            if (userRequest.getAnnotation() != null) event.setAnnotation(userRequest.getAnnotation());
-            if (userRequest.getCategory() != null) event.setCategory(getCategoryById(userRequest.getCategory()));
-            if (userRequest.getDescription() != null) event.setDescription(userRequest.getDescription());
-            if (userRequest.getEventDate() != null) {
-                LocalDateTime newDate = LocalDateTime.parse(userRequest.getEventDate(), FORMATTER);
-                if (newDate.isBefore(LocalDateTime.now().plusHours(2))) {
-                    throw new ConflictException("Event date must be at least 2 hours from now");
-                }
-                event.setEventDate(newDate);
-            }
-            if (userRequest.getLocation() != null) event.setLocation(toLocation(userRequest.getLocation()));
-            if (userRequest.getPaid() != null) event.setPaid(userRequest.getPaid());
-            if (userRequest.getParticipantLimit() != null) event.setParticipantLimit(userRequest.getParticipantLimit());
-            if (userRequest.getRequestModeration() != null) event.setRequestModeration(userRequest.getRequestModeration());
-            if (userRequest.getTitle() != null) event.setTitle(userRequest.getTitle());
+            UpdateEventUserRequest req = (UpdateEventUserRequest) request;
+            if (req.getAnnotation() != null) event.setAnnotation(req.getAnnotation());
+            if (req.getCategory() != null) event.setCategory(getCategoryById(req.getCategory()));
+            if (req.getDescription() != null) event.setDescription(req.getDescription());
+            if (req.getLocation() != null) event.setLocation(toLocation(req.getLocation()));
+            if (req.getPaid() != null) event.setPaid(req.getPaid());
+            if (req.getParticipantLimit() != null) event.setParticipantLimit(req.getParticipantLimit());
+            if (req.getRequestModeration() != null) event.setRequestModeration(req.getRequestModeration());
+            if (req.getTitle() != null) event.setTitle(req.getTitle());
         } else if (request instanceof UpdateEventAdminRequest) {
-            UpdateEventAdminRequest adminRequest = (UpdateEventAdminRequest) request;
-            if (adminRequest.getAnnotation() != null) event.setAnnotation(adminRequest.getAnnotation());
-            if (adminRequest.getCategory() != null) event.setCategory(getCategoryById(adminRequest.getCategory()));
-            if (adminRequest.getDescription() != null) event.setDescription(adminRequest.getDescription());
-            if (adminRequest.getEventDate() != null) {
-                event.setEventDate(LocalDateTime.parse(adminRequest.getEventDate(), FORMATTER));
-            }
-            if (adminRequest.getLocation() != null) event.setLocation(toLocation(adminRequest.getLocation()));
-            if (adminRequest.getPaid() != null) event.setPaid(adminRequest.getPaid());
-            if (adminRequest.getParticipantLimit() != null) event.setParticipantLimit(adminRequest.getParticipantLimit());
-            if (adminRequest.getRequestModeration() != null) event.setRequestModeration(adminRequest.getRequestModeration());
-            if (adminRequest.getTitle() != null) event.setTitle(adminRequest.getTitle());
+            UpdateEventAdminRequest req = (UpdateEventAdminRequest) request;
+            if (req.getAnnotation() != null) event.setAnnotation(req.getAnnotation());
+            if (req.getCategory() != null) event.setCategory(getCategoryById(req.getCategory()));
+            if (req.getDescription() != null) event.setDescription(req.getDescription());
+            if (req.getLocation() != null) event.setLocation(toLocation(req.getLocation()));
+            if (req.getPaid() != null) event.setPaid(req.getPaid());
+            if (req.getParticipantLimit() != null) event.setParticipantLimit(req.getParticipantLimit());
+            if (req.getRequestModeration() != null) event.setRequestModeration(req.getRequestModeration());
+            if (req.getTitle() != null) event.setTitle(req.getTitle());
         }
     }
 
@@ -230,12 +296,12 @@ public class EventService {
         return EventFullDto.builder()
                 .id(event.getId())
                 .annotation(event.getAnnotation())
-                .category(new ru.practicum.main.category.dto.CategoryDto(event.getCategory().getId(), event.getCategory().getName()))
+                .category(new CategoryDto(event.getCategory().getId(), event.getCategory().getName()))
                 .confirmedRequests(confirmedRequests)
                 .createdOn(event.getCreatedOn())
                 .description(event.getDescription())
                 .eventDate(event.getEventDate())
-                .initiator(new ru.practicum.main.user.dto.UserShortDto(event.getInitiator().getId(), event.getInitiator().getName()))
+                .initiator(new UserShortDto(event.getInitiator().getId(), event.getInitiator().getName()))
                 .location(new LocationDto(event.getLocation().getLat(), event.getLocation().getLon()))
                 .paid(event.getPaid())
                 .participantLimit(event.getParticipantLimit())
@@ -254,10 +320,10 @@ public class EventService {
         return EventShortDto.builder()
                 .id(event.getId())
                 .annotation(event.getAnnotation())
-                .category(new ru.practicum.main.category.dto.CategoryDto(event.getCategory().getId(), event.getCategory().getName()))
+                .category(new CategoryDto(event.getCategory().getId(), event.getCategory().getName()))
                 .confirmedRequests(confirmedRequests)
                 .eventDate(event.getEventDate())
-                .initiator(new ru.practicum.main.user.dto.UserShortDto(event.getInitiator().getId(), event.getInitiator().getName()))
+                .initiator(new UserShortDto(event.getInitiator().getId(), event.getInitiator().getName()))
                 .paid(event.getPaid())
                 .title(event.getTitle())
                 .views(views)
@@ -266,7 +332,7 @@ public class EventService {
 
     private long getViews(Event event) {
         List<ViewStats> stats = statsClient.getStats(
-                event.getCreatedOn(),
+                event.getCreatedOn() != null ? event.getCreatedOn() : LocalDateTime.now().minusYears(1),
                 LocalDateTime.now(),
                 List.of("/events/" + event.getId()),
                 true
