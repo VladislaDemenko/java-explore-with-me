@@ -13,31 +13,34 @@ import jakarta.validation.Valid;
 
 @Slf4j
 @RestController
-@RequestMapping("/admin/categories")
+@RequestMapping(CategoryAdminController.BASE_PATH)
 @RequiredArgsConstructor
 @Validated
 public class CategoryAdminController {
+
+    public static final String BASE_PATH = "/admin/categories";
+    public static final String CAT_ID_PATH = "/{catId}";
 
     private final CategoryService categoryService;
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public CategoryDto createCategory(@Valid @RequestBody NewCategoryDto newCategoryDto) {
-        log.info("POST /admin/categories - {}", newCategoryDto);
+        log.info("POST {} - {}", BASE_PATH, newCategoryDto);
         return categoryService.createCategory(newCategoryDto);
     }
 
-    @PatchMapping("/{catId}")
+    @PatchMapping(CAT_ID_PATH)
     public CategoryDto updateCategory(@PathVariable Long catId,
                                       @Valid @RequestBody CategoryDto categoryDto) {
-        log.info("PATCH /admin/categories/{} - {}", catId, categoryDto);
+        log.info("PATCH {}/{} - {}", BASE_PATH, catId, categoryDto);
         return categoryService.updateCategory(catId, categoryDto);
     }
 
-    @DeleteMapping("/{catId}")
+    @DeleteMapping(CAT_ID_PATH)
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void deleteCategory(@PathVariable Long catId) {
-        log.info("DELETE /admin/categories/{}", catId);
+        log.info("DELETE {}/{}", BASE_PATH, catId);
         categoryService.deleteCategory(catId);
     }
 }
