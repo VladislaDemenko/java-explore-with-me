@@ -15,10 +15,13 @@ import java.util.List;
 
 @Slf4j
 @RestController
-@RequestMapping("/users/{userId}/comments")
+@RequestMapping(CommentPrivateController.BASE_PATH)
 @RequiredArgsConstructor
 @Validated
 public class CommentPrivateController {
+
+    public static final String BASE_PATH = "/users/{userId}/comments";
+    public static final String COMMENT_ID_PATH = "/{commentId}";
 
     private final CommentService commentService;
 
@@ -40,7 +43,7 @@ public class CommentPrivateController {
         return commentService.createComment(userId, eventId, newCommentDto);
     }
 
-    @PatchMapping("/{commentId}")
+    @PatchMapping(COMMENT_ID_PATH)
     public CommentDto updateComment(@PathVariable Long userId,
                                     @PathVariable Long commentId,
                                     @Valid @RequestBody UpdateCommentDto updateCommentDto) {
@@ -48,7 +51,7 @@ public class CommentPrivateController {
         return commentService.updateComment(userId, commentId, updateCommentDto);
     }
 
-    @DeleteMapping("/{commentId}")
+    @DeleteMapping(COMMENT_ID_PATH)
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void deleteComment(@PathVariable Long userId,
                               @PathVariable Long commentId) {

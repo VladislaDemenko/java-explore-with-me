@@ -8,16 +8,19 @@ import ru.practicum.main.comment.service.CommentService;
 
 @Slf4j
 @RestController
-@RequestMapping("/admin/comments")
+@RequestMapping(CommentAdminController.BASE_PATH)
 @RequiredArgsConstructor
 public class CommentAdminController {
 
+    public static final String BASE_PATH = "/admin/comments";
+    public static final String COMMENT_ID_PATH = "/{commentId}";
+
     private final CommentService commentService;
 
-    @DeleteMapping("/{commentId}")
+    @DeleteMapping(COMMENT_ID_PATH)
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void deleteComment(@PathVariable Long commentId) {
-        log.info("DELETE /admin/comments/{}", commentId);
+        log.info("DELETE {}/{}", BASE_PATH, commentId);
         commentService.deleteCommentByAdmin(commentId);
     }
 }
