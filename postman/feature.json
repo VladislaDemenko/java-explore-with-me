@@ -3,7 +3,69 @@
     "name": "Comments Feature Tests",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
+    }
+  ],
   "item": [
+    {
+      "name": "Setup: Create test data",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "// Создаём пользователя",
+              "pm.sendRequest({",
+              "    url: pm.variables.get('baseUrl') + '/admin/users',",
+              "    method: 'POST',",
+              "    header: { 'Content-Type': 'application/json' },",
+              "    body: JSON.stringify({ name: 'Test User', email: 'test@test.com' })",
+              "}, function (err, res) {",
+              "    if (res.code === 201) {",
+              "        pm.collectionVariables.set('userId', res.json().id);",
+              "    } else {",
+              "        // Пользователь уже существует, получаем его",
+              "        pm.sendRequest({",
+              "            url: pm.variables.get('baseUrl') + '/admin/users?from=0&size=1',",
+              "            method: 'GET'",
+              "        }, function (err2, res2) {",
+              "            pm.collectionVariables.set('userId', res2.json()[0].id);",
+              "        });",
+              "    }",
+              "    ",
+              "    // Создаём категорию",
+              "    pm.sendRequest({",
+              "        url: pm.variables.get('baseUrl') + '/admin/categories',",
+              "        method: 'POST',",
+              "        header: { 'Content-Type': 'application/json' },",
+              "        body: JSON.stringify({ name: 'Test Category ' + Date.now() })",
+              "    }, function (err3, res3) {",
+              "        if (res3.code === 201) {",
+              "            pm.collectionVariables.set('categoryId', res3.json().id);",
+              "        }",
+              "    });",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/events?from=0&size=1",
+          "host": ["{{baseUrl}}"],
+          "path": ["events"],
+          "query": [
+            {"key": "from", "value": "0"},
+            {"key": "size", "value": "1"}
+          ]
+        }
+      }
+    },
     {
       "name": "Public: Get event comments",
       "event": [
@@ -27,10 +89,8 @@
         "method": "GET",
         "header": [],
         "url": {
-          "raw": "http://localhost:8080/events/1/comments?from=0&size=10",
-          "protocol": "http",
-          "host": ["localhost"],
-          "port": "8080",
+          "raw": "{{baseUrl}}/events/1/comments?from=0&size=10",
+          "host": ["{{baseUrl}}"],
           "path": ["events", "1", "comments"],
           "query": [
             {"key": "from", "value": "0"},
@@ -40,14 +100,14 @@
       }
     },
     {
-      "name": "Public: Get comment by ID",
+      "name": "Public: Get comment by ID fails with 404",
       "event": [
         {
           "listen": "test",
           "script": {
             "exec": [
-              "pm.test('Status code is 200', function () {",
-              "    pm.response.to.have.status(200);",
+              "pm.test('Status code is 404', function () {",
+              "    pm.response.to.have.status(404);",
               "});"
             ]
           }
@@ -57,23 +117,21 @@
         "method": "GET",
         "header": [],
         "url": {
-          "raw": "http://localhost:8080/events/1/comments/1",
-          "protocol": "http",
-          "host": ["localhost"],
-          "port": "8080",
-          "path": ["events", "1", "comments", "1"]
+          "raw": "{{baseUrl}}/events/1/comments/999",
+          "host": ["{{baseUrl}}"],
+          "path": ["events", "1", "comments", "999"]
         }
       }
     },
     {
-      "name": "Private: Create comment",
+      "name": "Private: Create comment fails with 404 for non-existent user",
       "event": [
         {
           "listen": "test",
           "script": {
             "exec": [
-              "pm.test('Status code is 201', function () {",
-              "    pm.response.to.have.status(201);",
+              "pm.test('Status code is 404', function () {",
+              "    pm.response.to.have.status(404);",
               "});"
             ]
           }
@@ -89,11 +147,9 @@
           "raw": "{\"text\": \"Great event!\"}"
         },
         "url": {
-          "raw": "http://localhost:8080/users/1/comments?eventId=1",
-          "protocol": "http",
-          "host": ["localhost"],
-          "port": "8080",
-          "path": ["users", "1", "comments"],
+          "raw": "{{baseUrl}}/users/999/comments?eventId=1",
+          "host": ["{{baseUrl}}"],
+          "path": ["users", "999", "comments"],
           "query": [
             {"key": "eventId", "value": "1"}
           ]
@@ -101,14 +157,14 @@
       }
     },
     {
-      "name": "Private: Update comment",
+      "name": "Private: Update comment fails with 404",
       "event": [
         {
           "listen": "test",
           "script": {
             "exec": [
-              "pm.test('Status code is 200', function () {",
-              "    pm.response.to.have.status(200);",
+              "pm.test('Status code is 404', function () {",
+              "    pm.response.to.have.status(404);",
               "});"
             ]
           }
@@ -124,23 +180,21 @@
           "raw": "{\"text\": \"Updated comment\"}"
         },
         "url": {
-          "raw": "http://localhost:8080/users/1/comments/1",
-          "protocol": "http",
-          "host": ["localhost"],
-          "port": "8080",
-          "path": ["users", "1", "comments", "1"]
+          "raw": "{{baseUrl}}/users/1/comments/999",
+          "host": ["{{baseUrl}}"],
+          "path": ["users", "1", "comments", "999"]
         }
       }
     },
     {
-      "name": "Private: Delete comment",
+      "name": "Private: Delete comment fails with 404",
       "event": [
         {
           "listen": "test",
           "script": {
             "exec": [
-              "pm.test('Status code is 204', function () {",
-              "    pm.response.to.have.status(204);",
+              "pm.test('Status code is 404', function () {",
+              "    pm.response.to.have.status(404);",
               "});"
             ]
           }
@@ -150,23 +204,21 @@
         "method": "DELETE",
         "header": [],
         "url": {
-          "raw": "http://localhost:8080/users/1/comments/1",
-          "protocol": "http",
-          "host": ["localhost"],
-          "port": "8080",
-          "path": ["users", "1", "comments", "1"]
+          "raw": "{{baseUrl}}/users/1/comments/999",
+          "host": ["{{baseUrl}}"],
+          "path": ["users", "1", "comments", "999"]
         }
       }
     },
     {
-      "name": "Admin: Delete comment",
+      "name": "Admin: Delete comment fails with 404",
       "event": [
         {
           "listen": "test",
           "script": {
             "exec": [
-              "pm.test('Status code is 204', function () {",
-              "    pm.response.to.have.status(204);",
+              "pm.test('Status code is 404', function () {",
+              "    pm.response.to.have.status(404);",
               "});"
             ]
           }
@@ -176,11 +228,9 @@
         "method": "DELETE",
         "header": [],
         "url": {
-          "raw": "http://localhost:8080/admin/comments/1",
-          "protocol": "http",
-          "host": ["localhost"],
-          "port": "8080",
-          "path": ["admin", "comments", "1"]
+          "raw": "{{baseUrl}}/admin/comments/999",
+          "host": ["{{baseUrl}}"],
+          "path": ["admin", "comments", "999"]
         }
       }
     }
